@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const MONGO_URI = 'mongodb+srv://itzsamyy69_db_user:Itzsamyy69@cluster0.shokcht.mongodb.net/friendsgame?appName=Cluster0';
+const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/friendsgame';
 
 // User Schema (with embedded OTP verification fields)
 const UserSchema = new mongoose.Schema({
