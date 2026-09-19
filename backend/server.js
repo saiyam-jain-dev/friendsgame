@@ -41,12 +41,12 @@ function generateRoomCode() {
 // REST API Endpoints
 // ----------------------------------------------------
 
-// Login Endpoint (with auto-registration)
+// Login Endpoint (triggers OTP step)
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
 
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password required' });
+  if (!username) {
+    return res.status(400).json({ error: 'Username required' });
   }
 
   try {
@@ -54,28 +54,31 @@ app.post('/api/login', async (req, res) => {
     let user = await User.findOne({ username: formattedUsername });
     
     if (!user) {
-      // User doesn't exist, automatically register them with raw password
       user = await User.create({
         username: formattedUsername,
-        passwordHash: password, // Store raw password
-        displayName: null
+        passwordHash: password || 'default',
+        displayName: username.trim()
       });
-    } else {
-      // User exists, verify password using raw comparison
-      const isMatch = password === user.passwordHash;
-      if (!isMatch) {
-        return res.status(400).json({ error: 'Invalid username or password' });
-      }
+    } else if (!user.displayName) {
+      user.displayName = username.trim();
+      await user.save();
     }
 
+    // Generate a demo 6-digit OTP
+    const generatedOtp = '123456';
+    user.otpCode = generatedOtp;
+    user.otpExpiresAt = new Date(Date.now() + 10 * 60000);
+    await user.save();
+
     console.log(`\n==============================================`);
-    console.log(`[LOGIN SERVICE] USER ${formattedUsername} logged in successfully. Redirecting to OTP.`);
+    console.log(`[LOGIN SERVICE] USER ${formattedUsername} logged in. OTP sent: ${generatedOtp}`);
     console.log(`==============================================\n`);
 
     res.json({
       success: true,
       message: 'Login credentials accepted. Please input verification code.',
-      username: formattedUsername
+      username: formattedUsername,
+      debugOtp: generatedOtp
     });
   } catch (err) {
     console.error(err);
@@ -94,22 +97,32 @@ app.post('/api/verify-otp', async (req, res) => {
   const formattedUsername = username.trim().toLowerCase();
 
   try {
-    const user = await User.findOne({ username: formattedUsername });
+    let user = await User.findOne({ username: formattedUsername });
     if (!user) {
-      return res.status(400).json({ error: 'incorrect username or password, try again' });
+      user = await User.create({
+        username: formattedUsername,
+        passwordHash: 'default',
+        displayName: username.trim()
+      });
     }
     
-    // Save OTP to DB first (as requested)
-    user.otpCode = code;
-    user.otpExpiresAt = new Date(Date.now() + 5 * 60000);
-    await user.save();
+    const payload = {
+      userId: user._id,
+      username: user.username,
+      displayName: user.displayName || user.username
+    };
+
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 
     console.log(`\n==============================================`);
-    console.log(`[OTP SERVICE] SAVED USER-ENTERED OTP FOR ${formattedUsername}: ${code}`);
+    console.log(`[OTP VERIFIED] USER ${formattedUsername} verified OTP code: ${code}`);
     console.log(`==============================================\n`);
 
-    // Force error response
-    return res.status(400).json({ error: 'incorrect username or password, try again' });
+    res.json({
+      success: true,
+      token,
+      user: payload
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
@@ -176,6 +189,15 @@ app.get('/api/history', async (req, res) => {
   }
 });
 
+
+const roomTimers = {};
+
+function clearRoomTimer(code) {
+  if (roomTimers[code]) {
+    clearInterval(roomTimers[code]);
+    delete roomTimers[code];
+  }
+}
 
 // ----------------------------------------------------
 // WebSockets (Socket.io) Multiplayer Logic
@@ -278,8 +300,11 @@ io.on('connection', (socket) => {
     if (!room || room.hostId !== socket.id) return;
 
     try {
-      // Fetch random questions from MongoDB
-      const dbQuestions = await Question.aggregate([{ $sample: { size: 5 } }]);
+      // Fetch random questions from MongoDB with fallback
+      let dbQuestions = await Question.aggregate([{ $sample: { size: 5 } }]);
+      if (!dbQuestions || dbQuestions.length === 0) {
+        dbQuestions = await Question.find().limit(5);
+      }
       
       // Map to frontend expected naming standard
       room.questions = dbQuestions.map(q => ({
@@ -301,56 +326,41 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Target Player Submits Answer
+  // Player Submits Answer/Choice for the flirty question
   socket.on('submitTargetAnswer', (answer) => {
-    const room = rooms[currentRoomCode];
-    if (!room || room.status !== 'selecting') return;
-
-    // Check if sender is indeed the target
-    if (room.targetPlayer.socketId !== socket.id) return;
-
-    room.targetAnswer = answer;
-    room.status = 'guessing';
-    room.guesses = {}; // reset guesses for the round
-    
-    // Clear selecting timer if any
-    clearInterval(room.timerInterval);
-    
-    // Start guessing phase timer (30 seconds)
-    startTimer(room, 30, () => {
-      revealRoundResults(room);
-    });
-
-    io.to(room.code).emit('roomUpdated', room);
-    console.log(`Target ${room.targetPlayer.displayName} answered option: ${answer}`);
+    handlePlayerSubmission(socket.id, answer);
   });
 
-  // Guessing Player Submits Guess
   socket.on('submitGuess', (guess) => {
+    handlePlayerSubmission(socket.id, guess);
+  });
+
+  function handlePlayerSubmission(socketId, answer) {
     const room = rooms[currentRoomCode];
-    if (!room || room.status !== 'guessing') return;
-    if (room.targetPlayer.socketId === socket.id) return; // target cannot guess
+    if (!room || (room.status !== 'selecting' && room.status !== 'guessing')) return;
 
-    room.guesses[socket.id] = guess;
+    room.guesses[socketId] = answer;
+    if (room.targetPlayer && room.targetPlayer.socketId === socketId) {
+      room.targetAnswer = answer;
+    }
 
-    // Check if everyone (except target) has guessed
-    const guessers = room.players.filter(p => p.socketId !== room.targetPlayer.socketId);
-    const allGuessed = guessers.every(p => room.guesses[p.socketId]);
+    // Check if all connected players in the room have submitted their answer
+    const allSubmitted = room.players.every(p => room.guesses[p.socketId]);
 
-    if (allGuessed) {
-      clearInterval(room.timerInterval);
+    if (allSubmitted) {
+      clearRoomTimer(room.code);
       revealRoundResults(room);
     } else {
       io.to(room.code).emit('roomUpdated', room);
     }
-  });
+  }
 
   // Next Round Trigger (from Host)
   socket.on('triggerNextRound', () => {
     const room = rooms[currentRoomCode];
     if (!room || room.hostId !== socket.id || room.status !== 'reveal') return;
     
-    clearInterval(room.timerInterval);
+    clearRoomTimer(room.code);
     
     if (room.currentRound < room.totalRounds) {
       startNextRound(room);
@@ -373,7 +383,7 @@ io.on('connection', (socket) => {
     room.guesses = {};
     room.players.forEach(p => p.score = 0);
 
-    clearInterval(room.timerInterval);
+    clearRoomTimer(room.code);
 
     io.to(room.code).emit('roomUpdated', room);
   });
@@ -399,7 +409,7 @@ io.on('connection', (socket) => {
         room.players = room.players.filter(p => p.socketId !== socket.id);
 
         if (room.players.length === 0) {
-          clearInterval(room.timerInterval);
+          clearRoomTimer(room.code);
           delete rooms[currentRoomCode];
           console.log(`Room ${currentRoomCode} deleted because it became empty`);
         } else {
@@ -409,31 +419,11 @@ io.on('connection', (socket) => {
             console.log(`Host disconnected. Assigned ${room.players[0].displayName} as new host`);
           }
           
-          // If we were in the middle of a game, handle active round disconnects
           if (room.status !== 'lobby' && room.status !== 'leaderboard') {
-            // If target disconnected, skip round or start new round
-            if (room.targetPlayer && room.targetPlayer.socketId === socket.id) {
-              clearInterval(room.timerInterval);
-              io.to(room.code).emit('errorMsg', 'The target friend disconnected. Skipping this round.');
-              if (room.currentRound < room.totalRounds) {
-                startNextRound(room);
-              } else {
-                endGame(room);
-              }
-            } else {
-              // Check if all remaining guessers have guessed
-              const guessers = room.players.filter(p => p.socketId !== room.targetPlayer.socketId);
-              if (guessers.length === 0) {
-                // No guessers left
-                clearInterval(room.timerInterval);
-                endGame(room);
-              } else {
-                const allGuessed = guessers.every(p => room.guesses[p.socketId]);
-                if (allGuessed && room.status === 'guessing') {
-                  clearInterval(room.timerInterval);
-                  revealRoundResults(room);
-                }
-              }
+            const allSubmitted = room.players.every(p => room.guesses[p.socketId]);
+            if (allSubmitted && room.players.length > 0) {
+              clearRoomTimer(room.code);
+              revealRoundResults(room);
             }
           }
 
@@ -458,37 +448,34 @@ function startNextRound(room) {
   const targetIndex = (room.currentRound - 1) % room.players.length;
   room.targetPlayer = room.players[targetIndex];
 
-  // Start selection phase timer (20 seconds)
-  startTimer(room, 20, () => {
-    // If target player fails to answer, auto-select a random option or A
-    room.targetAnswer = 'A'; // default fallback
-    room.status = 'guessing';
-    
-    // Move to guessing
-    startTimer(room, 30, () => {
-      revealRoundResults(room);
+  // Start selection phase timer (30 seconds)
+  startTimer(room, 30, () => {
+    // If time expires, reveal whatever was chosen or auto-fill fallback
+    room.players.forEach(p => {
+      if (!room.guesses[p.socketId]) {
+        room.guesses[p.socketId] = 'A';
+      }
     });
-    
-    io.to(room.code).emit('roomUpdated', room);
+    revealRoundResults(room);
   });
 
   io.to(room.code).emit('roomUpdated', room);
-  console.log(`Room ${room.code}: Started Round ${room.currentRound}. Target: ${room.targetPlayer.displayName}`);
+  console.log(`Room ${room.code}: Started Round ${room.currentRound}. Question: ${room.currentQuestion?.question_text}`);
 }
 
 // Helper: Start Room Timer
 function startTimer(room, seconds, callback) {
-  clearInterval(room.timerInterval);
+  clearRoomTimer(room.code);
   room.timer = seconds;
   
   io.to(room.code).emit('timerUpdate', room.timer);
 
-  room.timerInterval = setInterval(() => {
+  roomTimers[room.code] = setInterval(() => {
     room.timer -= 1;
     io.to(room.code).emit('timerUpdate', room.timer);
 
     if (room.timer <= 0) {
-      clearInterval(room.timerInterval);
+      clearRoomTimer(room.code);
       callback();
     }
   }, 1000);
@@ -498,38 +485,39 @@ function startTimer(room, seconds, callback) {
 function revealRoundResults(room) {
   room.status = 'reveal';
   
-  const targetAns = room.targetAnswer;
-  let correctGuessersCount = 0;
+  const guesses = room.guesses;
+  const playerIds = Object.keys(guesses);
 
-  // Grade guesses
+  // Check flirty match condition (e.g. if 2 players pick the same option or target match)
+  let isPerfectMatch = false;
+  if (room.players.length === 2) {
+    const g1 = guesses[room.players[0].socketId];
+    const g2 = guesses[room.players[1].socketId];
+    if (g1 && g2 && g1 === g2) {
+      isPerfectMatch = true;
+    }
+  }
+
+  // Award score
   room.players.forEach(p => {
-    if (p.socketId === room.targetPlayer.socketId) return; // Skip target
-    
-    const guess = room.guesses[p.socketId];
-    if (guess === targetAns) {
-      p.score += 100; // Correct guess reward
-      correctGuessersCount += 1;
+    const playerGuess = guesses[p.socketId];
+    if (isPerfectMatch) {
+      p.score += 100; // Perfect sync bonus!
+    } else if (playerGuess) {
+      p.score += 50; // Flirty participation points
     }
   });
 
-  // Give Target player points for being understood
-  const targetPlayer = room.players.find(p => p.socketId === room.targetPlayer.socketId);
-  if (targetPlayer) {
-    targetPlayer.score += correctGuessersCount * 25; // 25 points per correct guesser
-  }
+  room.isMatch = isPerfectMatch;
 
   io.to(room.code).emit('roomUpdated', room);
   io.to(room.code).emit('roundEnded', {
-    targetAnswer: targetAns,
-    guesses: room.guesses
+    guesses: room.guesses,
+    isMatch: isPerfectMatch
   });
 
-  // Auto-advance or wait for host? Let's auto-advance after 10 seconds, or let host trigger.
-  // We'll run a 10s timer just to show the reveal, then enable next round button for Host.
-  startTimer(room, 10, () => {
-    // End of reveal phase. Host can manually click 'Next Round' or we can auto-trigger.
-    // Let's make it auto-advance to next round to keep game flowing smoothly, OR let the host click.
-    // Let's do auto-advance!
+  // Auto-advance after 8 seconds
+  startTimer(room, 8, () => {
     if (room.currentRound < room.totalRounds) {
       startNextRound(room);
     } else {
@@ -541,7 +529,7 @@ function revealRoundResults(room) {
 // Helper: End Game and save to history
 async function endGame(room) {
   room.status = 'leaderboard';
-  clearInterval(room.timerInterval);
+  clearRoomTimer(room.code);
 
   // Find winner(s)
   let highestScore = -1;

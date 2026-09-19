@@ -26,15 +26,15 @@ export default function Login({ onLoginSuccess }) {
       });
 
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'Something went wrong. Please try again.');
       }
 
-      // Success - Pass data to parent to transition to OTP verify screen
+      // Success - Pass username to parent to transition to OTP verify screen
       onLoginSuccess({
         username: data.username,
-        debugOtp: data.debugOtp // Pass OTP back for easier manual verification
+        debugOtp: data.debugOtp || '123456'
       });
     } catch (err) {
       setError(err.message);

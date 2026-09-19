@@ -2,54 +2,35 @@ import React, { useState, useEffect } from 'react';
 
 export default function GameBoard({ room, socket }) {
   const [selectedOption, setSelectedOption] = useState(null);
-  const [roundWinnerData, setRoundWinnerData] = useState(null);
 
   const currentSocketId = socket?.id;
   const isHost = room?.hostId === currentSocketId;
-  const targetPlayer = room?.targetPlayer;
-  const isTarget = targetPlayer?.socketId === currentSocketId;
   const currentQuestion = room?.currentQuestion;
   const status = room?.status; // 'selecting' | 'guessing' | 'reveal'
   const timer = room?.timer;
+  const players = room?.players || [];
+  const guesses = room?.guesses || {};
 
   // Reset local state when round changes
   useEffect(() => {
     setSelectedOption(null);
   }, [room?.currentRound]);
 
-  // Listen for round results to show who got it right
-  useEffect(() => {
-    if (!socket) return;
-    const handleRoundEnd = (data) => {
-      setRoundWinnerData(data);
-    };
-    socket.on('roundEnded', handleRoundEnd);
-    return () => {
-      socket.off('roundEnded', handleRoundEnd);
-    };
-  }, [socket]);
-
   if (!room || !currentQuestion) {
     return (
       <div className="glass-card text-center">
         <div className="spinner"></div>
-        <h2>Loading game data...</h2>
+        <h2>Loading flirty question...</h2>
       </div>
     );
   }
 
   const handleSelectOption = (optionLetter) => {
-    if (selectedOption) return; // already submitted
+    if (selectedOption || guesses[currentSocketId]) return; // already submitted
 
     setSelectedOption(optionLetter);
-
-    if (isTarget) {
-      // Target submits their actual answer
-      socket.emit('submitTargetAnswer', optionLetter);
-    } else {
-      // Guesser submits their guess
-      socket.emit('submitGuess', optionLetter);
-    }
+    socket.emit('submitGuess', optionLetter);
+    socket.emit('submitTargetAnswer', optionLetter);
   };
 
   // Option letters mapping
@@ -60,227 +41,170 @@ export default function GameBoard({ room, socket }) {
     { letter: 'D', text: currentQuestion.option_d }
   ];
 
+  const submittedCount = players.filter(p => guesses[p.socketId]).length;
+  const mySubmittedChoice = selectedOption || guesses[currentSocketId];
+
   // ----------------------------------------------------
-  // PHASE 1: TARGET SELECTING ANSWER
+  // PHASE 1 & 2: SELECTING / GUESSING FLIRTY CHOICES
   // ----------------------------------------------------
-  if (status === 'selecting') {
+  if (status === 'selecting' || status === 'guessing') {
     return (
-      <div className="glass-card" style={{ maxWidth: '520px' }}>
+      <div className="glass-card" style={{ maxWidth: '540px' }}>
         <div className="game-header">
-          <div className="round-tracker">
-            Round <span>{room.currentRound}</span> of {room.totalRounds}
+          <div className="round-tracker" style={{ color: 'var(--accent-pink)', fontWeight: 'bold' }}>
+            💕 Round <span>{room.currentRound}</span> of {room.totalRounds}
           </div>
           <div className={`timer-ring ${timer <= 5 ? 'low-time' : ''}`}>{timer}</div>
         </div>
 
-        {isTarget ? (
-          <div>
-            <div className="text-center">
-              <span className="target-badge" style={{ backgroundColor: 'var(--snap-yellow)', color: '#000' }}>
-                🌟 You are the TARGET!
-              </span>
-              <p className="game-prompt">Choose the answer that is TRUE about you:</p>
-            </div>
+        <div className="text-center" style={{ marginBottom: '1rem' }}>
+          <span className="target-badge" style={{ backgroundColor: '#ff4b8b', color: '#FFF', fontWeight: 'bold', fontSize: '0.85rem' }}>
+            🔥 FLIRTY CHOICE
+          </span>
+          <p className="game-prompt" style={{ marginTop: '0.4rem', fontSize: '0.95rem' }}>
+            Select what you think your partner/friend likes the most!
+          </p>
+        </div>
 
-            <h2 className="question-text">{currentQuestion.question_text}</h2>
+        <h2 className="question-text" style={{ fontSize: '1.25rem', textAlign: 'center', marginBottom: '1.5rem', lineHeight: '1.4' }}>
+          {currentQuestion.question_text}
+        </h2>
 
-            <div className="options-stack">
-              {options.map((opt) => (
-                <button
-                  key={opt.letter}
-                  className={`option-button ${selectedOption === opt.letter ? 'selected' : ''}`}
-                  onClick={() => handleSelectOption(opt.letter)}
-                  disabled={selectedOption !== null}
-                >
-                  <span className="option-letter">{opt.letter}</span>
-                  <span>{opt.text}</span>
-                </button>
-              ))}
+        <div className="options-stack">
+          {options.map((opt) => (
+            <button
+              key={opt.letter}
+              className={`option-button ${mySubmittedChoice === opt.letter ? 'selected' : ''}`}
+              onClick={() => handleSelectOption(opt.letter)}
+              disabled={Boolean(mySubmittedChoice)}
+            >
+              <span className="option-letter">{opt.letter}</span>
+              <span style={{ fontSize: '0.95rem', fontWeight: '500' }}>{opt.text}</span>
+            </button>
+          ))}
+        </div>
+
+        <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+          {mySubmittedChoice ? (
+            <div style={{
+              backgroundColor: 'rgba(255, 75, 139, 0.15)',
+              border: '1px solid var(--accent-pink)',
+              borderRadius: '12px',
+              padding: '0.75rem',
+              color: '#FFF',
+              fontWeight: '600',
+              fontSize: '0.9rem'
+            }}>
+              💖 Selection Locked! Waiting for partner ({submittedCount}/{players.length} ready)...
             </div>
-            
-            <p className="text-center" style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-              {selectedOption ? 'Answer submitted! Waiting for friends...' : 'Choose quickly!'}
+          ) : (
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              Choose your answer before the timer runs out!
             </p>
-          </div>
-        ) : (
-          <div className="waiting-screen">
-            <div className="spinner"></div>
-            <span className="target-badge">Target Friend: {targetPlayer?.displayName}</span>
-            <h2 className="waiting-title" style={{ marginTop: '1rem' }}>
-              {targetPlayer?.displayName} is choosing...
-            </h2>
-            <p className="waiting-subtitle" style={{ padding: '0 1rem' }}>
-              They are answering a question about themselves. Get ready to guess what they choose!
-            </p>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     );
   }
 
   // ----------------------------------------------------
-  // PHASE 2: OTHER PLAYERS GUESSING
-  // ----------------------------------------------------
-  if (status === 'guessing') {
-    // Check if player has already submitted guess
-    const hasGuessed = selectedOption !== null;
-    const guessers = room.players.filter(p => p.socketId !== targetPlayer.socketId);
-    const guessedCount = guessers.filter(p => room.guesses[p.socketId]).length;
-
-    return (
-      <div className="glass-card" style={{ maxWidth: '520px' }}>
-        <div className="game-header">
-          <div className="round-tracker">
-            Round <span>{room.currentRound}</span> of {room.totalRounds}
-          </div>
-          <div className={`timer-ring ${timer <= 5 ? 'low-time' : ''}`}>{timer}</div>
-        </div>
-
-        {isTarget ? (
-          <div className="waiting-screen">
-            <div className="spinner" style={{ borderColor: 'rgba(14,146,243,0.1)', borderLeftColor: 'var(--accent-blue)' }}></div>
-            <span className="target-badge">Locked In: Option {room.targetAnswer}</span>
-            <h2 className="waiting-title" style={{ marginTop: '1rem' }}>
-              Friends are guessing...
-            </h2>
-            <p className="waiting-subtitle">
-              Submitted: {guessedCount} of {guessers.length} players
-            </p>
-            
-            <div style={{ marginTop: '1.5rem', textAlign: 'left' }}>
-              <h4 style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-                Guess Log:
-              </h4>
-              {guessers.map((p) => (
-                <div key={p.socketId} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.35rem 0', fontSize: '0.85rem' }}>
-                  <span>{p.displayName}</span>
-                  <span style={{ color: room.guesses[p.socketId] ? 'var(--accent-green)' : 'var(--text-secondary)' }}>
-                    {room.guesses[p.socketId] ? '✓ Guessed' : 'Thinking...'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div>
-            <div className="text-center">
-              <span className="target-badge">Target Friend: {targetPlayer?.displayName}</span>
-              <p className="game-prompt">What will {targetPlayer?.displayName} choose?</p>
-            </div>
-
-            <h2 className="question-text">{currentQuestion.question_text}</h2>
-
-            <div className="options-stack">
-              {options.map((opt) => (
-                <button
-                  key={opt.letter}
-                  className={`option-button ${selectedOption === opt.letter ? 'selected' : ''}`}
-                  onClick={() => handleSelectOption(opt.letter)}
-                  disabled={hasGuessed}
-                >
-                  <span className="option-letter">{opt.letter}</span>
-                  <span>{opt.text}</span>
-                </button>
-              ))}
-            </div>
-
-            <p className="text-center" style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-              {hasGuessed 
-                ? `You guessed Option ${selectedOption}. Waiting for others (${guessedCount}/${guessers.length})...`
-                : 'Select the option you think they chose!'}
-            </p>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // ----------------------------------------------------
-  // PHASE 3: REVEAL ANSWERS & SCORING
+  // PHASE 3: REVEAL FLIRTY ANSWERS & MATCH RESULTS
   // ----------------------------------------------------
   if (status === 'reveal') {
-    const targetAns = room.targetAnswer;
+    const isMatch = room.isMatch;
 
     return (
-      <div className="glass-card" style={{ maxWidth: '520px' }}>
+      <div className="glass-card" style={{ maxWidth: '540px' }}>
         <div className="game-header">
-          <div className="round-tracker">
-            Round <span>{room.currentRound}</span> of {room.totalRounds}
+          <div className="round-tracker" style={{ color: 'var(--accent-pink)', fontWeight: 'bold' }}>
+            💕 Round <span>{room.currentRound}</span> of {room.totalRounds}
           </div>
           <div className="timer-ring low-time">{timer}</div>
         </div>
 
-        <div className="text-center">
-          <span className="target-badge" style={{ backgroundColor: 'var(--accent-green)', color: '#000' }}>
-            Reveal Phase
-          </span>
-          <p className="game-prompt">
-            {isTarget 
-              ? `You selected Option ${targetAns}` 
-              : `${targetPlayer?.displayName} selected Option ${targetAns}!`}
+        <div className="text-center" style={{ marginBottom: '1rem' }}>
+          {isMatch ? (
+            <span className="target-badge" style={{ backgroundColor: '#22c55e', color: '#FFF', padding: '0.4rem 1rem', fontSize: '0.95rem', fontWeight: '800' }}>
+              🔥 PERFECT FLIRTY MATCH! (+100 PTS)
+            </span>
+          ) : (
+            <span className="target-badge" style={{ backgroundColor: '#a855f7', color: '#FFF', padding: '0.4rem 1rem', fontSize: '0.95rem', fontWeight: '800' }}>
+              💕 FLIRTY CHOICES REVEALED! (+50 PTS)
+            </span>
+          )}
+          <p className="game-prompt" style={{ marginTop: '0.5rem', fontSize: '1rem', fontWeight: '600', color: isMatch ? '#4ade80' : 'var(--snap-yellow)' }}>
+            {isMatch ? 'You both picked the exact same flirty option!' : 'Opposites attract! Here is what both of you selected:'}
           </p>
         </div>
 
-        <h2 className="question-text">{currentQuestion.question_text}</h2>
+        <h2 className="question-text" style={{ fontSize: '1.2rem', textAlign: 'center', marginBottom: '1.25rem' }}>
+          {currentQuestion.question_text}
+        </h2>
 
+        {/* Options Stack with Player Badges */}
         <div className="options-stack">
           {options.map((opt) => {
-            const isCorrect = opt.letter === targetAns;
-            const wasGuessedByMe = selectedOption === opt.letter;
-            let optClass = '';
-            
-            if (isCorrect) {
-              optClass = 'correct';
-            } else if (wasGuessedByMe && !isTarget) {
-              optClass = 'incorrect';
-            }
+            const playersWhoPicked = players.filter(p => guesses[p.socketId] === opt.letter);
+            const isSelected = playersWhoPicked.length > 0;
 
             return (
               <div
                 key={opt.letter}
-                className={`option-button ${optClass}`}
-                style={{ cursor: 'default' }}
+                className={`option-button ${isSelected ? (isMatch ? 'correct' : 'selected') : ''}`}
+                style={{ cursor: 'default', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '0.85rem' }}
               >
-                <span className="option-letter">{opt.letter}</span>
-                <span style={{ flexGrow: 1 }}>{opt.text}</span>
-                {isCorrect && <span style={{ color: 'var(--accent-green)', fontWeight: 'bold' }}>✓ Correct Answer</span>}
-                {wasGuessedByMe && !isTarget && !isCorrect && (
-                  <span style={{ color: 'var(--accent-pink)', fontWeight: 'bold' }}>Your Guess</span>
+                <div style={{ display: 'flex', width: '100%', alignItems: 'center' }}>
+                  <span className="option-letter">{opt.letter}</span>
+                  <span style={{ flexGrow: 1, fontWeight: '500' }}>{opt.text}</span>
+                </div>
+
+                {playersWhoPicked.length > 0 && (
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                    {playersWhoPicked.map((p) => (
+                      <span key={p.socketId} style={{
+                        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                        padding: '0.2rem 0.6rem',
+                        borderRadius: '20px',
+                        fontSize: '0.75rem',
+                        fontWeight: 'bold',
+                        color: '#FFF',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.3rem'
+                      }}>
+                        💋 {p.displayName} {p.socketId === currentSocketId && '(You)'}
+                      </span>
+                    ))}
+                  </div>
                 )}
               </div>
             );
           })}
         </div>
 
-        <div style={{ marginTop: '1.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.05)', paddingTop: '1rem' }}>
-          <h4 style={{ fontSize: '0.9rem', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-            Who guessed what:
+        {/* Player Choices Side-by-Side Summary */}
+        <div style={{ marginTop: '1.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '1rem' }}>
+          <h4 style={{ fontSize: '0.85rem', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '0.75rem', letterSpacing: '1px' }}>
+            💌 Summary of Selections:
           </h4>
-          <div className="reveal-grid">
-            {room.players.map((p) => {
-              if (p.socketId === targetPlayer.socketId) {
-                return (
-                  <div key={p.socketId} className="reveal-guess-row" style={{ borderLeft: '3px solid var(--snap-yellow)' }}>
-                    <strong>{p.displayName} (Target)</strong>
-                    <span style={{ color: 'var(--snap-yellow)' }}>Picked Option {targetAns}</span>
-                  </div>
-                );
-              }
-
-              const pGuess = room.guesses[p.socketId];
-              const isCorrectGuess = pGuess === targetAns;
-
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {players.map((p) => {
+              const pChoice = guesses[p.socketId];
+              const chosenObj = options.find(o => o.letter === pChoice);
               return (
-                <div key={p.socketId} className="reveal-guess-row">
-                  <span>{p.displayName}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ color: isCorrectGuess ? 'var(--accent-green)' : 'var(--text-secondary)' }}>
-                      Guessed Option {pGuess || 'None'}
-                    </span>
-                    <span className={`guess-status-pill ${isCorrectGuess ? 'correct' : 'incorrect'}`}>
-                      {isCorrectGuess ? '+100 pts' : '+0 pts'}
-                    </span>
-                  </div>
+                <div key={p.socketId} style={{
+                  display: 'flex',
+                  justify: 'space-between',
+                  alignItems: 'center',
+                  padding: '0.5rem 0.75rem',
+                  backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                  borderRadius: '10px',
+                  fontSize: '0.85rem'
+                }}>
+                  <span style={{ fontWeight: '600' }}>{p.displayName}:</span>
+                  <span style={{ color: 'var(--snap-yellow)', fontWeight: 'bold' }}>
+                    {pChoice ? `Option ${pChoice} - ${chosenObj ? chosenObj.text : ''}` : 'No selection'}
+                  </span>
                 </div>
               );
             })}
@@ -291,9 +215,9 @@ export default function GameBoard({ room, socket }) {
           <button 
             onClick={() => socket.emit('triggerNextRound')}
             className="btn btn-primary mt-4"
-            style={{ padding: '0.8rem' }}
+            style={{ padding: '0.8rem', width: '100%', fontWeight: 'bold' }}
           >
-            {room.currentRound === room.totalRounds ? 'See Final Leaderboard' : 'Next Round (Skip Timer)'}
+            {room.currentRound === room.totalRounds ? 'See Final Leaderboard 🏆' : 'Next Round →'}
           </button>
         )}
       </div>

@@ -50,23 +50,23 @@ export default function Dashboard({ user, onCreateRoom, onJoinRoom, errorMsg, on
       </div>
 
       <div className="brand-header" style={{ marginBottom: '1.5rem' }}>
-        <h1 className="brand-title" style={{ fontSize: '1.8rem' }}>Friends <span>Lounge</span></h1>
-        <p className="brand-subtitle">Host a room or enter a friend's room code to start playing</p>
+        <h1 className="brand-title" style={{ fontSize: '1.8rem' }}>Flirty <span>Lounge</span> 💕</h1>
+        <p className="brand-subtitle">Host a room or enter a room code to play flirty trivia together</p>
       </div>
 
       {(error || errorMsg) && <div className="error-banner">{error || errorMsg}</div>}
 
       <div className="dashboard-grid">
         <div className="dashboard-card" onClick={onCreateRoom}>
-          <span className="dashboard-card-icon">🎮</span>
+          <span className="dashboard-card-icon">🔥</span>
           <h2 className="dashboard-card-title">Create Room</h2>
-          <p className="dashboard-card-desc">Be the host and invite friends</p>
+          <p className="dashboard-card-desc">Host a room & invite your partner</p>
         </div>
 
         <div className="dashboard-card" style={{ cursor: 'default' }}>
-          <span className="dashboard-card-icon">⚡</span>
+          <span className="dashboard-card-icon">💋</span>
           <h2 className="dashboard-card-title">Join Room</h2>
-          <p className="dashboard-card-desc">Enter code to join friends</p>
+          <p className="dashboard-card-desc">Enter room code to join</p>
         </div>
       </div>
 
@@ -93,13 +93,13 @@ export default function Dashboard({ user, onCreateRoom, onJoinRoom, errorMsg, on
 
       <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.05)', paddingTop: '1.25rem' }}>
         <h3 style={{ fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>
-          📖 How to Play
+          💕 How to Play
         </h3>
         <ul style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', paddingLeft: '1.2rem', lineHeight: '1.5' }}>
-          <li>One friend is designated as the <strong>Target</strong> each round.</li>
-          <li>The Target secretly answers a trivia question about themselves.</li>
-          <li>All other friends guess what they think the Target picked.</li>
-          <li>Earn <strong>100 pts</strong> for correct guesses! Targets get points when they are guessed correctly!</li>
+          <li>Both players join the room using the 4-letter room code.</li>
+          <li>Each round presents a flirty, playful question with 4 options.</li>
+          <li>Both players select what they think the other likes the most!</li>
+          <li>Once both choose, answers are revealed side-by-side with <strong>100 pts</strong> for perfect matches!</li>
         </ul>
       </div>
     </div>

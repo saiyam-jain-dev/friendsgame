@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { BACKEND_URL } from '../config';
 
-export default function OtpVerify({ username, onOtpSuccess, onBack }) {
+export default function OtpVerify({ username, debugOtp, onOtpSuccess, onBack }) {
   const [code, setCode] = useState(new Array(6).fill(''));
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);

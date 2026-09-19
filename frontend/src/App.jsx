@@ -115,13 +115,7 @@ export default function App() {
     localStorage.setItem('token', receivedToken);
     setToken(receivedToken);
     setUser(receivedUser);
-    
-    // Redirect based on whether display name is registered
-    if (!receivedUser.displayName) {
-      setScreen('register_name');
-    } else {
-      setScreen('dashboard');
-    }
+    setScreen('dashboard');
   };
 
   const handleNameConfirm = async (newName) => {
@@ -226,6 +220,7 @@ export default function App() {
       {screen === 'otp' && (
         <OtpVerify 
           username={loginUsername} 
+          debugOtp={debugOtp}
           onOtpSuccess={handleOtpSuccess} 
           onBack={() => setScreen('login')} 
         />
