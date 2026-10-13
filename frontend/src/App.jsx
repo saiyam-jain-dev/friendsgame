@@ -276,7 +276,7 @@ export default function App() {
         color: 'var(--text-secondary)',
         opacity: 0.6
       }}>
-        Friends Game © 2026 • Snapchat Integrated Styling
+        Know Your Partner © 2026 • Snapchat Integrated Styling
       </footer>
     </div>
   );

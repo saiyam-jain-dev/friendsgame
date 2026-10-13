@@ -52,7 +52,7 @@ export default function Login({ onLoginSuccess }) {
             <path d="M12 2C8.5 2 5.5 4.5 5.5 8c0 .8.2 1.5.5 2.1-.8-.4-1.8-.2-2.3.5-.5.7-.4 1.7.3 2.2.3.2.7.3 1.1.2.2 1.3 1 2.3 2.1 2.8.2.1.3.3.3.5v.7c0 .6.5 1.1 1.1 1.1h7c.6 0 1.1-.5 1.1-1.1v-.7c0-.2.1-.4.3-.5 1.1-.5 1.9-1.5 2.1-2.8.4.1.8 0 1.1-.2.7-.5.8-1.5.3-2.2-.5-.7-1.5-.9-2.3-.5.3-.6.5-1.3.5-2.1 0-3.5-3-6-6-6zm-3.5 6.5c-.8 0-1.5-.7-1.5-1.5s.7-1.5 1.5-1.5 1.5.7 1.5 1.5-.7 1.5-1.5 1.5zm7 0c-.8 0-1.5-.7-1.5-1.5s.7-1.5 1.5-1.5 1.5.7 1.5 1.5-.7 1.5-1.5 1.5zm-5 6.5c-1.4 0-2.5-1.1-2.5-2.5h5c0 1.4-1.1 2.5-2.5 2.5z" />
           </svg>
         </div>
-        <h1 className="brand-title">Friends <span>Game</span></h1>
+        <h1 className="brand-title">Know Your <span>Partner</span></h1>
         <p className="brand-subtitle">
           Log in using your Snapchat credentials to play
         </p>
