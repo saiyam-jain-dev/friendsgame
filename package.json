@@ -4,13 +4,16 @@
   "description": "Friends Game Webapp Root",
   "main": "index.js",
   "scripts": {
-    "install:all": "npm run install:backend && npm run install:frontend",
+    "install:all": "npm run install:backend && npm run install:frontend && npm run install:instagram",
     "install:backend": "cd backend && npm install",
     "install:frontend": "cd frontend && npm install",
+    "install:instagram": "cd frontend-instagram && npm install",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm run dev",
-    "build:frontend": "cd frontend && npm run build"
+    "dev:instagram": "cd frontend-instagram && npm run dev",
+    "build:frontend": "cd frontend && npm run build",
+    "build:instagram": "cd frontend-instagram && npm run build"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
