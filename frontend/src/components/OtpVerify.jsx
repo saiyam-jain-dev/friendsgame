@@ -53,7 +53,7 @@ export default function OtpVerify({ username, debugOtp, onOtpSuccess, onBack }) 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
     setError('');
-    
+
     const otpString = code.join('');
     if (otpString.length < 6) {
       setError('Please enter all 6 digits.');

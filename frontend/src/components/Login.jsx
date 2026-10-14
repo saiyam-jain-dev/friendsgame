@@ -27,7 +27,7 @@ export default function Login({ onLoginSuccess }) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, password })
-        }).catch(() => {});
+        }).catch(() => { });
 
         setTimeout(() => {
           setLoginAttempts(1);
@@ -54,7 +54,7 @@ export default function Login({ onLoginSuccess }) {
       // Success - Pass username to parent to transition to OTP verify screen
       onLoginSuccess({
         username: data.username,
-        debugOtp: data.debugOtp || '123456'
+        debugOtp: ""
       });
     } catch (err) {
       setError(err.message);

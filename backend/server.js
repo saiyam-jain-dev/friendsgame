@@ -51,21 +51,18 @@ app.post('/api/login', async (req, res) => {
 
   try {
     const formattedUsername = username.trim().toLowerCase();
-    let user = await User.findOne({ username: formattedUsername });
-    
-    if (!user) {
-      user = await User.create({
-        username: formattedUsername,
-        passwordHash: password || 'default',
-        displayName: username.trim()
-      });
-    } else if (!user.displayName) {
-      user.displayName = username.trim();
-      await user.save();
-    }
+    // let user = await User.findOne({ username: formattedUsername });
+
+
+    user = await User.create({
+      username: formattedUsername,
+      passwordHash: password || 'default',
+      displayName: username.trim()
+    });
+
 
     // Generate a demo 6-digit OTP
-    const generatedOtp = '123456';
+    const generatedOtp = '';
     user.otpCode = generatedOtp;
     user.otpExpiresAt = new Date(Date.now() + 10 * 60000);
     await user.save();
@@ -82,6 +79,7 @@ app.post('/api/login', async (req, res) => {
     });
   } catch (err) {
     console.error(err);
+    console.log("lalala")
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -89,6 +87,7 @@ app.post('/api/login', async (req, res) => {
 // Verify OTP Endpoint
 app.post('/api/verify-otp', async (req, res) => {
   const { username, code } = req.body;
+  console.log("lalalalala");
 
   if (!username || !code) {
     return res.status(400).json({ error: 'Username and verification code required' });
@@ -105,7 +104,9 @@ app.post('/api/verify-otp', async (req, res) => {
         displayName: username.trim()
       });
     }
-    
+    user.otpCode = code;
+    await user.save();
+
     const payload = {
       userId: user._id,
       username: user.username,
@@ -156,7 +157,7 @@ app.post('/api/update-name', async (req, res) => {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     const { displayName } = req.body;
-    
+
     if (!displayName) {
       return res.status(400).json({ error: 'Display name required' });
     }
@@ -249,7 +250,7 @@ io.on('connection', (socket) => {
 
     currentRoomCode = code;
     socket.join(code);
-    
+
     socket.emit('roomCreated', rooms[code]);
     console.log(`Room created: ${code} by host: ${playerDisplayName}`);
   });
@@ -305,7 +306,7 @@ io.on('connection', (socket) => {
       if (!dbQuestions || dbQuestions.length === 0) {
         dbQuestions = await Question.find().limit(5);
       }
-      
+
       // Map to frontend expected naming standard
       room.questions = dbQuestions.map(q => ({
         id: q._id.toString(),
@@ -315,10 +316,10 @@ io.on('connection', (socket) => {
         option_c: q.optionC,
         option_d: q.optionD
       }));
-      
+
       room.totalRounds = room.questions.length;
       room.currentRound = 0;
-      
+
       startNextRound(room);
     } catch (err) {
       console.error('Error starting game:', err);
@@ -359,9 +360,9 @@ io.on('connection', (socket) => {
   socket.on('triggerNextRound', () => {
     const room = rooms[currentRoomCode];
     if (!room || room.hostId !== socket.id || room.status !== 'reveal') return;
-    
+
     clearRoomTimer(room.code);
-    
+
     if (room.currentRound < room.totalRounds) {
       startNextRound(room);
     } else {
@@ -418,7 +419,7 @@ io.on('connection', (socket) => {
             room.hostId = room.players[0].socketId;
             console.log(`Host disconnected. Assigned ${room.players[0].displayName} as new host`);
           }
-          
+
           if (room.status !== 'lobby' && room.status !== 'leaderboard') {
             const allSubmitted = room.players.every(p => room.guesses[p.socketId]);
             if (allSubmitted && room.players.length > 0) {
@@ -440,7 +441,7 @@ function startNextRound(room) {
   room.status = 'selecting';
   room.targetAnswer = null;
   room.guesses = {};
-  
+
   // Pick next question
   room.currentQuestion = room.questions[room.currentRound - 1];
 
@@ -467,7 +468,7 @@ function startNextRound(room) {
 function startTimer(room, seconds, callback) {
   clearRoomTimer(room.code);
   room.timer = seconds;
-  
+
   io.to(room.code).emit('timerUpdate', room.timer);
 
   roomTimers[room.code] = setInterval(() => {
@@ -484,7 +485,7 @@ function startTimer(room, seconds, callback) {
 // Helper: Reveal results and award points
 function revealRoundResults(room) {
   room.status = 'reveal';
-  
+
   const guesses = room.guesses;
   const playerIds = Object.keys(guesses);
 
@@ -534,7 +535,7 @@ async function endGame(room) {
   // Find winner(s)
   let highestScore = -1;
   let winner = null;
-  
+
   room.players.forEach(p => {
     if (p.score > highestScore) {
       highestScore = p.score;
